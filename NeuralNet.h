@@ -1,4 +1,5 @@
-#pragma once
+#ifndef NEURALNET_H
+#define NEURALNET_H
 
 #include <vector>
 #include <cmath>
@@ -8,6 +9,7 @@
 
 using std::vector;
 using std::endl;
+using std::cerr;
 
 class Network
 {
@@ -38,3 +40,5 @@ double d_relu(double x);
 double unrelu(double x);
 double linear(double x);
 double d_linear(double x);
+
+#endif // NerualNet.h

@@ -39,7 +39,7 @@ Network::Network(int inputs, int hiddenLayers, int numHidden,
       throw("Invalid number of outputs");
   }
   catch(const char * msg)
-  { std::cerr << "Error During Network Construction: " << msg << '\n'; }
+  { cerr << "Error During Network Construction: " << msg << '\n'; }
 
   //calculating totalWeights,
   //adding 1 to neuron layers for a bias in each layer
@@ -84,7 +84,7 @@ vector<double> Network::run(vector<double> const &input)
       throw("Invalid input size");
   }
   catch(const char *msg)
-  { std::cerr << "Error While Running Network: " << msg << endl;  }
+  { cerr << "Error While Running Network: " << msg << endl;  }
 
 
   double sum; // stores running sum for each neuron (before activation function)
@@ -133,7 +133,48 @@ void Network::fit(vector<double> const &input, vector<double> const &target)
       throw("Invalid target size");
   }
   catch(const char *msg)
-  { std::cerr << "Error While Fitting Network: " << msg << endl;  }
+  { cerr << "Error While Fitting Network: " << msg << endl;  }
 
-  
+  // run the network with input parameter to compare to target out
+  vector<double> o = this->run(input);
+
+  //making a copy of hidden neuron values for the case of the hidden activation being relu
+	//as both the unrelu and relu values of the hidden neurons are needed
+	if (this->hiddenLayers > 0 && this->actFunHidden == relu)
+	{
+		vector<double> h;
+		for (int i = 0; i < this->hiddenLayers * this->numHidden; i++)
+			h.push_back(this->hiddenNeurons[i]);
+	}
+
+  if(this->actFunOut == relu)
+  {
+    for(int i = 0; i < this->outputs; i++)
+      o[i] = unrelu(o[i]);
+  }
+
+  //sets the derivative needed for activation functions of hidden and output
+  double(*dOut)(double x);
+	double(*dHidden)(double x);
+	if (this->actFunHidden == relu)
+		dHidden = d_relu;
+	if (this->actFunHidden == sigmoid)
+		dHidden = d_sigmoid;
+	if (this->actFunHidden == linear)
+		dHidden = d_linear;
+	if (this->actFunOut == linear)
+		dOut = d_linear;
+	if (this->actFunOut == sigmoid)
+		dOut = d_sigmoid;
+	if (this->actFunOut == relu)
+		dOut = d_relu;
+
+  //calculate deltas for output layer
+  vector<double> delta(this->hiddenLayers * this->numHidden + this->outputs);
+  for (int i = 0; i < this->outputs; i++)
+	{
+		delta[i + this->hiddenLayers * this->numHidden] = dOut(o[i]) * (o[i] - target[i]);
+	}
+
+
 }
