@@ -6,10 +6,19 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
+#include <fstream>
+#include <string>
 
 using std::vector;
 using std::endl;
 using std::cerr;
+using std::fstream;
+using std::string;
+
+//parameters for updating weights (uses RMSProp algorithm)
+#define LR .001
+#define DECAYRATE .95
+#define EPS .000001
 
 class Network
 {
@@ -17,10 +26,13 @@ public:
   // constructs a new network based on parameters
   Network(int inputs, int hiddenLayers, int numHidden,
     int outputs, double(*actHidden)(double x), double(*actOut)(double x));
+  Network(char const location[]); // constructs network from a save file
   ~Network(); // destructor for a network
 
   vector<double> run(vector<double> const &input); //computes the given output of the network from the input
-  void fit(vector<double> const &input, vector<double> const &target); //Updates the weights of the nework based on the paramters
+  void fit(vector<double> &input, vector<double> const &target); //Updates the weights of the nework based on the paramters
+  void save(char const location[]);
+  void load(char const location[]);
 
 private:
   int inputs, hiddenLayers, numHidden, outputs, totalWeights; // total # of each value
@@ -28,6 +40,8 @@ private:
   double(*actFunOut)(double x); // neuron activation function for the output
   double(*actFunHidden)(double x); // neuron activation function of the hidden layers
 };
+
+typedef double (*Function)(double x);
 
 //acivation functions and their derivatives
 //relu gives values [0, infinity] while sigmoid gives [0, 1]

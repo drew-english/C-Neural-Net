@@ -36,7 +36,7 @@ Network::Network(int inputs, int hiddenLayers, int numHidden,
 	  if (hiddenLayers > 0 && numHidden <= 0)
       throw("Invalid number of hidden neurons");
 	  if (outputs <= 0)
-      throw("Invalid number of outputs");
+      throw("Invalid number of outputs");   
   }
   catch(const char * msg)
   { cerr << "Error During Network Construction: " << msg << '\n'; }
@@ -64,12 +64,15 @@ Network::Network(int inputs, int hiddenLayers, int numHidden,
 		if (rand() % 2)
 			this->weights[i] *= -1;
 
-    if(i < this->numHidden)
+    if(i < this->numHidden * this->hiddenLayers)
       this->hiddenNeurons.push_back(0);
 
 		this->cache.push_back(0);
 	}
 }
+
+Network::Network(char const location[])
+{ this->load(location); }
 
 //no memory is dynamically allocated, besides when inserting into the vector containers
 // which is then taken care of by their class.
@@ -123,7 +126,7 @@ vector<double> Network::run(vector<double> const &input)
   return output;
 }
 
-void Network::fit(vector<double> const &input, vector<double> const &target)
+void Network::fit(vector<double> &input, vector<double> const &target)
 {
   try // checking for errors in input or target sizes
   {
@@ -137,6 +140,7 @@ void Network::fit(vector<double> const &input, vector<double> const &target)
 
   // run the network with input parameter to compare to target out
   vector<double> o = this->run(input);
+  vector<double>::iterator w, d, cache, n;
 
   //making a copy of hidden neuron values for the case of the hidden activation being relu
 	//as both the unrelu and relu values of the hidden neurons are needed
@@ -146,6 +150,8 @@ void Network::fit(vector<double> const &input, vector<double> const &target)
 		for (int i = 0; i < this->hiddenLayers * this->numHidden; i++)
 			h.push_back(this->hiddenNeurons[i]);
 	}
+  else 
+   { h = hiddenNeurons;  } // h is still used for calculations
   if(this->actFunOut == relu)
   {
     for(int i = 0; i < this->outputs; i++)
@@ -179,8 +185,8 @@ void Network::fit(vector<double> const &input, vector<double> const &target)
 	for (int i = this->hiddenLayers; i > 0; i--)
 	{
 		//finds first weight and delta in next layer
-		vector<double>::iterator w = this->weights.begin() + ((this->inputs + 1) * this->numHidden) + ((this->numHidden + 1) * this->numHidden * (i - 1)) + 1;
-		vector<double>::iterator d = delta.begin() + (this->numHidden * i);
+		w = this->weights.begin() + ((this->inputs + 1) * this->numHidden) + ((this->numHidden + 1) * this->numHidden * (i - 1)) + 1;
+		d = delta.begin() + (this->numHidden * i);
 
 		for (int j = 0; j < this->numHidden; j++)
 		{
@@ -196,4 +202,149 @@ void Network::fit(vector<double> const &input, vector<double> const &target)
 			delta[this->numHidden * (i - 1) + j] *= dHidden(h[j]);
 		}
 	}
+
+  /* updating weights to output layer */
+
+	//first weight (and cache) (starting with the bias) to the first delta in output layer
+	w = this->weights.begin() + (this->hiddenLayers ? this->outputs * this->numHidden + this->numHidden * this->hiddenLayers :
+		0);
+
+	cache = this->cache.begin() + (this->hiddenLayers ? this->outputs * this->numHidden + this->numHidden * this->hiddenLayers :
+		0);
+	//first neuron in the previous layer
+	//n = (this->hiddenLayers ? this->hiddenNeurons.begin() + this->numHidden : input.begin());
+  n = (this->hiddenLayers ? this->hiddenNeurons.begin() + (this->numHidden * (this->hiddenLayers - 1)) : input.begin());
+
+  double dx = 0.0;
+  for (int i = 0; i < this->outputs; i++)
+	{
+		for (int j = 0; j < (this->hiddenLayers ? this->numHidden : this->inputs) + 1; j++)
+		{
+			if (j == 0)
+			{
+				dx = delta[this->numHidden * this->hiddenLayers + i];
+				//RMSProp calculations with weight update
+				*cache = DECAYRATE * *cache + (1 - DECAYRATE) * pow(dx, 2);
+				*w++ += -LR * dx / (sqrt(*cache++) + EPS);
+			}
+			else
+			{
+				dx = delta[this->numHidden * this->hiddenLayers + i] * n[j - 1];
+				*cache = DECAYRATE * *cache + (1 - DECAYRATE) * pow(dx, 2);
+				*w++ += -LR * dx / (sqrt(*cache++) + EPS);
+			}
+		}
+	}
+
+  /* updating weights to hidden layers if any */
+
+  for (int i = this->hiddenLayers; i > 0; i--)
+  {
+    //first weight (and cache) (starting with bias) to the delta in current layer
+    w = this->weights.begin() + ((i == 1 ? 0 : 1) * (this->inputs + 1) * this->numHidden) +
+        ((i == 1 ? 0 : i - 2) * (this->numHidden + 1) * this->numHidden);
+
+    cache = this->cache.begin() + ((i == 1 ? 0 : 1) * (this->inputs + 1) * this->numHidden) +
+            ((i == 1 ? 0 : i - 2) * (this->numHidden + 1) * this->numHidden);
+    //first neuron in previous layer
+    //n = (i == 1 ? input.begin() : this->hiddenNeurons.begin() + (this->numHidden * (i - 1)));
+    n = (i == 1 ? input.begin() : this->hiddenNeurons.begin() + (this->numHidden * (i - 2)));
+
+    for (int j = 0; j < this->numHidden; j++)
+    {
+      for (int k = 0; k < (i == 1 ? this->inputs : this->numHidden) + 1; k++)
+      {
+        if (k == 0)
+        {
+          dx = delta[this->numHidden * (i - 1) + j];
+          *cache = DECAYRATE * *cache + (1 - DECAYRATE) * pow(dx, 2);
+          *w++ += -LR * dx / (sqrt(*cache++) + EPS);
+        }
+        else
+        {
+          dx = delta[this->numHidden * (i - 1) + j] * n[k - 1];
+          *cache = DECAYRATE * *cache + (1 - DECAYRATE) * pow(dx, 2);
+          *w++ += -LR * dx / (sqrt(*cache++) + EPS);
+        }
+      }
+    }
+  }
+}
+
+void Network::save(char const location[])
+{
+  int funHidden = 0, funOut = 0;
+
+  //establish file stream, error check, and print network information
+  fstream out(location);
+  try
+  {
+    if(!out.is_open())
+      throw("File was not opened successfully");
+  }
+  catch(const char *msg)
+  { cerr << "Error while saving network: " << msg << endl;  }
+
+  out << this->inputs << " " << this->hiddenLayers << " " <<
+    this->numHidden << " " << this->outputs<< endl;
+
+  if (this->actFunHidden == sigmoid)
+    funHidden = 0;
+  if (this->actFunHidden == relu)
+    funHidden = 1;
+  if (this->actFunHidden == linear)
+    funHidden = 2;
+  if (this->actFunOut == sigmoid)
+    funOut = 0;
+  if (this->actFunOut == relu)
+    funOut = 1;
+  if (this->actFunOut == linear)
+    funOut = 2;
+
+  out << funHidden << " " << funOut << endl
+    << this->totalWeights << endl;
+
+  for(int i = 0; i < this->totalWeights; i++)
+    out << this->weights[i] << endl;
+
+  out.close();
+}
+
+void Network::load(char const location[])
+{
+ 
+  fstream in(location); // open file
+  try // check for errors
+  {
+    if (!in.is_open())
+      throw("File was not opened successfully");
+  }
+  catch (const char *msg)
+  { cerr << "Error while loading network: " << msg << endl; }
+
+  Function actFun[3] = {sigmoid, relu, linear};
+  int funHidden, funOut;
+
+  //read in all network parameters
+  in >> this->inputs >> this->hiddenLayers >> this->numHidden
+    >> this->outputs >> funHidden >> funOut >> this->totalWeights;
+  this->actFunHidden = actFun[funHidden];
+  this->actFunOut = actFun[funOut];
+
+  //clear current values of each vector, then repopulate them
+  this->weights.clear();
+  this->cache.clear();
+  this->hiddenNeurons.clear();
+
+  this->cache.resize(this->totalWeights, 0);
+  this->hiddenNeurons.resize(this->hiddenLayers * this->numHidden, 0);
+ 
+  double temp;
+  for(int i = 0; i < this->totalWeights; i++)
+  {
+    in >> temp;
+    this->weights.push_back(temp);
+  }
+
+  in.close();
 }
